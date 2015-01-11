@@ -1,0 +1,154 @@
+-- move api helps keep track of turtle movement in relation to the turtle's starting location, if gps fails, turtle will be facing north @ 0,0,0
+
+-- os.loadAPI('move')
+
+local _vectorMetatable = getmetatable(vector.new())
+function validvector(v)
+  return ((getmetatable(v) == _vectorMetatable) and (type(v.x) == 'number') and (type(v.y) == 'number') and (type(v.z) == 'number'))
+end
+function tovector(...)
+  local v = vector.new(unpack(arg))
+  if validvector(v) then return v end
+  v = v.x or vector.new()
+  if validvector(v) then return v end
+  if not (v.x) then
+    v = vector.new(unpack(v))
+  else
+    v = vector.new(v.x, v.y, v.z)
+  end
+  if validvector(v) then return v end
+  return vector.new()
+end
+
+local _position = vector.new(0,0,0)
+local _orientation = vector.new(0,0,-1)
+function position(...)
+  if arg.n > 0 then
+    _position = tovector(unpack(arg))
+    --todo: save position to file system
+    print(_position:tostring(), ':', _orientation:tostring())
+  end
+  return _position
+end
+function orientation(...)
+  if arg.n > 0 then
+    local orientation = tovector(unpack(arg))
+    if (orientation:length() == 1) then
+      _orientation = orientation
+      --todo: save orientation to file system
+    print(_position:tostring(), ':', _orientation:tostring())
+    end
+  end
+  return _orientation
+end
+
+function forward(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return back(times) end
+  if turtle.forward() then
+    position(position() + orientation())
+    if times > 1 then
+      forward(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function back(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return forward(times) end
+  if turtle.back() then
+    position(position() - orientation())
+    if times > 1 then
+      back(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function up(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return down(times) end
+  if turtle.up() then
+    position(position() + vector.new(0,1,0))
+    if times > 1 then
+      up(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function down(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return up(times) end
+  if turtle.down() then
+    position(position() - vector.new(0,1,0))
+    if times > 1 then
+      down(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function left(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return right(times) end
+  if turtle.turnLeft() then
+    orientation(vector.new(orientation().z, 0, orientation().x * -1))
+    if times > 1 then
+      left(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function right(times)
+  times = tonumber(times) or 1
+  if times == 0 then return true end
+  if times < 0 then return left(times) end
+  if turtle.turnRight() then
+    orientation(vector.new(orientation().z * -1, 0, orientation().x))
+    if times > 1 then
+      right(times - 1)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+function locate()
+  local x, y, z = gps.locate(5)
+  local location
+  if x and y and z then
+    location = position(x,y,z)
+  else
+    return
+  end
+  if forward() then
+    orientation(position(vector.new(gps.locate(5))) - location)
+    back()
+  elseif back() then
+    orientation((position(vector.new(gps.locate(5))) - location) * -1)
+    forward()
+  else
+    left()
+    locate()
+    right()
+  end
+end
