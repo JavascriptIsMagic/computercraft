@@ -1,1 +1,6 @@
-os.loadAPI('move')
+os.loadAPI('/lib/application')
+if pocket then
+  shell.openTab('beacon')
+else
+  shell.run('beacon')
+end

@@ -21,25 +21,25 @@ function tovector(...)
 end
 
 local _position = vector.new(0,0,0)
-local _orientation = vector.new(0,0,-1)
+local _heading = vector.new(0,0,-1) --north?
 function position(...)
   if arg.n > 0 then
     _position = tovector(unpack(arg))
     --todo: save position to file system
-    print(_position:tostring(), ':', _orientation:tostring())
+    print(_position:tostring(), ':', _heading:tostring())
   end
   return _position
 end
-function orientation(...)
+function heading(...)
   if arg.n > 0 then
-    local orientation = tovector(unpack(arg))
-    if (orientation:length() == 1) then
-      _orientation = orientation
-      --todo: save orientation to file system
-    print(_position:tostring(), ':', _orientation:tostring())
+    local heading = tovector(unpack(arg))
+    if (heading:length() == 1) then
+      _heading = heading
+      --todo: save heading to file system
+    print(_position:tostring(), ':', _heading:tostring())
     end
   end
-  return _orientation
+  return _heading
 end
 
 function forward(times)
@@ -47,7 +47,7 @@ function forward(times)
   if times == 0 then return true end
   if times < 0 then return back(times) end
   if turtle.forward() then
-    position(position() + orientation())
+    position(position() + heading())
     if times > 1 then
       forward(times - 1)
     else
@@ -62,7 +62,7 @@ function back(times)
   if times == 0 then return true end
   if times < 0 then return forward(times) end
   if turtle.back() then
-    position(position() - orientation())
+    position(position() - heading())
     if times > 1 then
       back(times - 1)
     else
@@ -107,7 +107,7 @@ function left(times)
   if times == 0 then return true end
   if times < 0 then return right(times) end
   if turtle.turnLeft() then
-    orientation(vector.new(orientation().z, 0, orientation().x * -1))
+    heading(vector.new(heading().z, 0, heading().x * -1))
     if times > 1 then
       left(times - 1)
     else
@@ -122,7 +122,7 @@ function right(times)
   if times == 0 then return true end
   if times < 0 then return left(times) end
   if turtle.turnRight() then
-    orientation(vector.new(orientation().z * -1, 0, orientation().x))
+    heading(vector.new(heading().z * -1, 0, heading().x))
     if times > 1 then
       right(times - 1)
     else
@@ -132,7 +132,7 @@ function right(times)
   return false
 end
 
-function locate()
+function locate(tries)
   local x, y, z = gps.locate(5)
   local location
   if x and y and z then
@@ -141,10 +141,10 @@ function locate()
     return
   end
   if forward() then
-    orientation(position(vector.new(gps.locate(5))) - location)
+    heading(position(vector.new(gps.locate(5))) - location)
     back()
   elseif back() then
-    orientation((position(vector.new(gps.locate(5))) - location) * -1)
+    heading((position(vector.new(gps.locate(5))) - location) * -1)
     forward()
   else
     left()

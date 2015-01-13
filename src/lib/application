@@ -1,0 +1,151 @@
+os.loadAPI('/lib/move')
+os.loadAPI('/lib/json')
+local defaultChannel = 7000
+
+-- application.new(getfenv())
+
+function new(application)
+  application.move = move
+  application.json = json
+  
+  --- NETWORKING:
+  function send(protocol, ...)
+    local position = move.position():round()
+    local heading = move.heading():round()
+    local data = {
+      protocol = protocol,
+      ['clock'] = os.clock(),
+      label = os.getComputerLabel(),
+      position = position,
+      heading = heading,
+      ...
+    }
+    application.network.modem.transmit(application.network.channel, application.network.channel + os.getComputerID(), json.encode(data))
+  end
+	application.network = {
+    channel = defaultChannel,
+    send = send
+  }
+	function wirelessModem(side)
+		local modem = peripheral.wrap(side)
+		if modem.isWireless() then return modem end
+		error('Not a Wireless Modem')
+	end
+	if not pcall(function () application.network.modem = wirelessModem('right') end) then
+		if not pcall(function () application.network.modem = wirelessModem('left') end) then
+			if not pcall(function () application.network.modem = wirelessModem('back') end) then
+				if not pcall(function () application.network.modem = wirelessModem('top') end)	then
+					if not pcall(function () application.network.modem = wirelessModem('bottom') end) then
+						if not pcall(function () application.network.modem = wirelessModem('front') end) then
+							error('No Wireless Modem Installed?')
+						end
+					end
+				end
+			end
+		end
+	end
+	application.network.modem.open(application.network.channel)
+	application.network.modem.open(application.network.channel + os.getComputerID())
+  
+  --- THREADING:
+  local event
+  local packet
+  local arguments
+  local threads = {
+    coroutine.create(function ()
+      while true do
+        application.network.send('beacon')
+        sleep(1 + math.random())
+      end
+    end)
+  }
+  local listeners = {}
+  local terminated = false
+  function resume(thread)
+    local listener = listeners[thread]
+    if (listener == nil) or (listener == event) then
+      local success, result = coroutine.resume(thread, event, unpack(arguments))
+      if success then
+        return result
+      else
+        printError(result, '@ ', event, ' ', arguments[1], ' ', arguments[2], ' ', arguments[3], ' ', arguments[4])
+        return nil
+      end
+    else
+      return listener
+    end
+  end
+  os.queueEvent('start')
+  while not terminated do
+    if packet then
+      arguments, packet = packet, nil
+    else
+      arguments = {os.pullEvent()}
+    end
+    event = table.remove(arguments, 1)
+    print(event, ' ', arguments[1], ' ', arguments[2], ' ', arguments[3], ' ', arguments[4])
+    if event == 'terminate' then
+      os.queueEvent('terminate')
+      terminated = true
+    else
+      if type(application[event]) == 'function' then
+        local thread = coroutine.create(function ()
+          application[event](unpack(arguments))
+        end)
+        listeners[thread] = event
+        table.insert(threads, thread)
+      end
+      local index = 1
+      local thread = threads[index]
+      while thread do
+        listeners[thread] = resume(thread)
+        if coroutine.status(thread) == 'dead' then
+          table.remove(threads, index)
+        else
+          index = index + 1
+        end
+        thread = threads[index]
+      end
+      if event == 'modem_message' then
+        xpcall(function ()
+          local side, channel, reply, message, distance = unpack(arguments)
+          local data = json.decode(message)
+          local protocol = table.remove(data, 1)
+          if application['net_'..protocol] ~= nil then
+            local sender = {
+              id = reply - application.network.channel,
+              distance = distance,
+              channel = channel,
+              protocol = protocol,
+              ['clock'] = table.remove(data, 1),
+              label = table.remove(data, 1),
+              position = move.tovector(table.remove(data, 1)),
+              heading = move.tovector(table.remove(data, 1))
+            }
+            data._ = nil
+            local receiver = {
+              id = os.getComputerID(),
+              distance = 0.0,
+              channel = channel,
+              protocol = protocol,
+              ['clock'] = os.clock(),
+              label = os.getComputerLabel(),
+              location = move.locations.location,
+              global = move.locations.global,
+              side = side
+            }
+            packet = { 'net_'..protocol, data, sender, receiver, message }
+          end
+        end, function (errors)
+          printError(errors, '\n@ ', event, ' ', arguments[1], ',', arguments[2], ',', arguments[3], ',', arguments[4])
+        end)
+      end
+    end
+  end
+  if application.terminate then
+    application.terminate()
+  end
+end
+
+--- Workaround to jumpstart the event loop on "startup":
+sleep()

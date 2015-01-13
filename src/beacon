@@ -1,0 +1,7 @@
+
+function net_beacon(...)
+  print('net_beacon')
+  print(unpack(...))
+end
+
+application.new(getfenv())
